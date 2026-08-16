@@ -1,0 +1,6 @@
+venv/
+.env
+__pycache__/
+*.pyc
+ATS_Report.pdf
+Rewritten_Resume.docx
