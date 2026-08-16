@@ -1,8 +1,7 @@
 streamlit
-google-generativeai
-python-dotenv
-pymupdf
-reportlab
-plotly
+PyMuPDF
 Pillow
+python-dotenv
+google-genai==2.18.1
+reportlab
 python-docx
