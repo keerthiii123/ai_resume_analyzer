@@ -1,7 +1,7 @@
-streamlit
+streamlit>=1.45.0
+google-genai>=1.30.0
+python-dotenv
 PyMuPDF
 Pillow
-python-dotenv
-google-genai==2.18.1
 reportlab
 python-docx

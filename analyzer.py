@@ -1,3 +1,4 @@
+
 import os
 import re
 import io
@@ -34,8 +35,7 @@ client = genai.Client(api_key=api_key) if api_key else None
 # =====================================================
 
 ROLE_SKILLS = {
-
-    "AI Engineer":[
+    "AI Engineer": [
         "python","langchain","langgraph","crewai",
         "rag","chromadb","fastapi","huggingface",
         "embeddings","vector database","llm",
@@ -43,42 +43,42 @@ ROLE_SKILLS = {
         "streamlit"
     ],
 
-    "Python Developer":[
+    "Python Developer": [
         "python","django","flask","fastapi",
         "sql","mysql","postgresql",
         "rest api","git","oop"
     ],
 
-    "Full Stack Developer":[
+    "Full Stack Developer": [
         "html","css","javascript","react",
         "django","python","mysql","node"
     ],
 
-    "Data Analyst":[
+    "Data Analyst": [
         "python","sql","excel","power bi",
         "tableau","pandas","numpy",
         "matplotlib","seaborn"
     ],
 
-    "Software Engineer":[
+    "Software Engineer": [
         "python","java","sql",
         "data structures","algorithms",
         "git","oop"
     ],
 
-    "Accountant":[
+    "Accountant": [
         "tally","gst","sap","excel",
         "accounting","bookkeeping",
         "accounts payable","accounts receivable"
     ],
 
-    "HR / Recruiter":[
+    "HR / Recruiter": [
         "recruitment","sourcing",
         "linkedin","naukri",
         "screening","excel"
     ],
 
-    "Customer Support":[
+    "Customer Support": [
         "customer support","crm",
         "communication","email support",
         "chat support"
@@ -86,54 +86,27 @@ ROLE_SKILLS = {
 }
 
 # =====================================================
-# ALIASES
+# SKILL ALIASES
 # =====================================================
 
 ALIASES = {
-
-    "vector database":[
-        "chromadb","chroma db","pinecone",
-        "faiss","weaviate","vector db"
-    ],
-
-    "huggingface":[
-        "hugging face","sentence-transformers"
-    ],
-
-    "rag":[
-        "retrieval augmented generation"
-    ],
-
-    "llm":[
-        "large language model"
-    ],
-
-    "github":[
-        "github.com"
-    ],
-
-    "generative ai":[
-        "gen ai","genai"
-    ],
-
-    "fastapi":[
-        "fast api"
-    ]
+    "vector database": ["chromadb","chroma db","pinecone","faiss","weaviate"],
+    "huggingface": ["hugging face","sentence-transformers"],
+    "rag": ["retrieval augmented generation"],
+    "llm": ["large language model"],
+    "github": ["github.com"],
+    "generative ai": ["gen ai","genai"],
+    "fastapi": ["fast api"]
 }
 
 # =====================================================
-# NORMALIZE TEXT
+# TEXT NORMALIZATION
 # =====================================================
 
 def normalize_text(text):
-
     text = text.lower()
-    text = text.replace("–","-")
-    text = text.replace("—","-")
-    text = text.replace("•"," ")
-
+    text = text.replace("–","-").replace("—","-").replace("•"," ")
     text = re.sub(r"\s+"," ",text)
-
     return text.strip()
 
 # =====================================================
@@ -141,7 +114,6 @@ def normalize_text(text):
 # =====================================================
 
 def extract_text(uploaded_file):
-
     uploaded_file.seek(0)
 
     pdf = fitz.open(
@@ -155,7 +127,6 @@ def extract_text(uploaded_file):
         text += page.get_text("text") + "\n"
 
     pdf.close()
-
     uploaded_file.seek(0)
 
     return text.strip()
@@ -186,7 +157,6 @@ def resume_preview(uploaded_file):
     )
 
     pdf.close()
-
     uploaded_file.seek(0)
 
     return image
@@ -212,10 +182,8 @@ def skill_exists(text, skill):
             if re.search(pattern, text):
                 return True
 
-        else:
-
-            if keyword in text:
-                return True
+        elif keyword in text:
+            return True
 
     return False
 
@@ -231,12 +199,9 @@ def job_description_match(resume_text, job_description):
     resume_text = normalize_text(resume_text)
     jd_text = normalize_text(job_description)
 
-    keywords = []
-
-    for skills in ROLE_SKILLS.values():
-        keywords.extend(skills)
-
-    keywords = sorted(set(keywords))
+    keywords = sorted(
+        set(skill for skills in ROLE_SKILLS.values() for skill in skills)
+    )
 
     matched = []
     missing = []
@@ -251,8 +216,8 @@ def job_description_match(resume_text, job_description):
                 missing.append(keyword)
 
     percentage = round(
-        len(matched)
-        / max(1, len(matched)+len(missing))
+        len(matched) /
+        max(1, len(matched)+len(missing))
         * 100
     )
 
@@ -268,19 +233,19 @@ def calculate_ats_score(resume_text, role, job_description=""):
 
     role_skills = ROLE_SKILLS.get(role, [])
 
-    found_skills = []
-    missing_skills = []
+    found = []
+    missing = []
 
     for skill in role_skills:
 
         if skill_exists(text, skill):
-            found_skills.append(skill)
+            found.append(skill)
         else:
-            missing_skills.append(skill)
+            missing.append(skill)
 
     skills_score = round(
-        len(found_skills)
-        / max(1, len(role_skills))
+        len(found) /
+        max(1, len(role_skills))
         * 60
     )
 
@@ -319,7 +284,6 @@ def calculate_ats_score(resume_text, role, job_description=""):
     )
 
     breakdown = {
-
         "skills": skills_score,
         "job_description": jd_score,
         "education": education_score,
@@ -328,9 +292,9 @@ def calculate_ats_score(resume_text, role, job_description=""):
 
     return (
         total,
-        found_skills,
-        missing_skills,
-        missing_skills[:10],
+        found,
+        missing,
+        missing[:10],
         breakdown
     )
 
@@ -344,21 +308,22 @@ def gemini_generate(prompt):
         return "⚠️ GEMINI_API_KEY not configured."
 
     models = [
-        "gemini-2.5-flash-lite",   # New supported model
-        "gemini-2.5-pro"
+        "gemini-3-flash-preview",
+        "gemini-3-pro-preview",
+        "gemini-2.5-flash"
     ]
 
     last_error = ""
 
     for model in models:
         try:
-            response = client.models.generate_content(
+            response = client.interactions.create(
                 model=model,
-                contents=prompt
+                input=prompt
             )
 
-            if response.text:
-                return response.text
+            if response.output_text:
+                return response.output_text
 
         except Exception as e:
             last_error = str(e)
@@ -366,7 +331,6 @@ def gemini_generate(prompt):
             if "429" in last_error:
                 return "⚠️ Gemini quota exceeded. Please try again later."
 
-            # Try next model if one is unavailable
             continue
 
     return f"⚠️ Gemini Error: {last_error}"
