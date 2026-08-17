@@ -1,4 +1,3 @@
-
 import os
 import re
 import io
@@ -9,11 +8,7 @@ from PIL import Image
 from dotenv import load_dotenv
 from google import genai
 
-from reportlab.platypus import (
-    SimpleDocTemplate,
-    Paragraph,
-    Spacer
-)
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.colors import HexColor
@@ -22,15 +17,15 @@ from docx import Document
 from docx.shared import Pt
 
 # =====================================================
-# GEMINI CONFIG
+# GEMINI CONFIG (Local + Streamlit Cloud)
 # =====================================================
 
 load_dotenv()
 
-api_key = (
-    st.secrets.get("GEMINI_API_KEY")
-    or os.getenv("GEMINI_API_KEY")
-)
+try:
+    api_key = st.secrets["GEMINI_API_KEY"]
+except Exception:
+    api_key = os.getenv("GEMINI_API_KEY")
 
 client = genai.Client(api_key=api_key) if api_key else None
 
@@ -98,7 +93,7 @@ ALIASES = {
 
     "vector database":[
         "chromadb","pinecone","faiss",
-        "weaviate","vector db"
+        "weaviate","vector db","chroma db"
     ],
 
     "huggingface":[
@@ -133,12 +128,11 @@ ALIASES = {
 def normalize_text(text):
 
     text = text.lower()
+    text = text.replace("–","-")
+    text = text.replace("—","-")
+    text = text.replace("•"," ")
 
-    text = text.replace("–", "-")
-    text = text.replace("—", "-")
-    text = text.replace("•", " ")
-
-    text = re.sub(r"\s+", " ", text)
+    text = re.sub(r"\s+"," ",text)
 
     return text.strip()
 
@@ -237,17 +231,17 @@ def job_description_match(resume_text, job_description):
     resume_text = normalize_text(resume_text)
     jd_text = normalize_text(job_description)
 
-    all_keywords = []
+    keywords = []
 
     for skills in ROLE_SKILLS.values():
-        all_keywords.extend(skills)
+        keywords.extend(skills)
 
-    all_keywords = sorted(set(all_keywords))
+    keywords = sorted(set(keywords))
 
     matched = []
     missing = []
 
-    for keyword in all_keywords:
+    for keyword in keywords:
 
         if skill_exists(jd_text, keyword):
 
@@ -257,8 +251,8 @@ def job_description_match(resume_text, job_description):
                 missing.append(keyword)
 
     percentage = round(
-        len(matched) /
-        max(1, len(matched)+len(missing))
+        len(matched)
+        / max(1, len(matched)+len(missing))
         * 100
     )
 
@@ -268,29 +262,25 @@ def job_description_match(resume_text, job_description):
 # ATS SCORE
 # =====================================================
 
-def calculate_ats_score(
-    resume_text,
-    role,
-    job_description=""
-):
+def calculate_ats_score(resume_text, role, job_description=""):
 
     text = normalize_text(resume_text)
 
     role_skills = ROLE_SKILLS.get(role, [])
 
-    found = []
-    missing = []
+    found_skills = []
+    missing_skills = []
 
     for skill in role_skills:
 
         if skill_exists(text, skill):
-            found.append(skill)
+            found_skills.append(skill)
         else:
-            missing.append(skill)
+            missing_skills.append(skill)
 
     skills_score = round(
-        len(found) /
-        max(1, len(role_skills))
+        len(found_skills)
+        / max(1, len(role_skills))
         * 60
     )
 
@@ -303,15 +293,13 @@ def calculate_ats_score(
 
     education_score = 5 if any(
         x in text for x in [
-            "b.e","btech",
-            "engineering","bachelor"
+            "b.e","btech","engineering","bachelor"
         ]
     ) else 0
 
     experience_score = 5 if any(
         x in text for x in [
-            "experience",
-            "work experience"
+            "experience","work experience"
         ]
     ) else 0
 
@@ -340,9 +328,9 @@ def calculate_ats_score(
 
     return (
         total,
-        found,
-        missing,
-        missing[:10],
+        found_skills,
+        missing_skills,
+        missing_skills[:10],
         breakdown
     )
 
@@ -364,31 +352,39 @@ def gemini_generate(prompt):
 
     for model in models:
 
-        try:
+        for _ in range(2):
 
-            response = client.models.generate_content(
-                model=model,
-                contents=prompt
-            )
+            try:
 
-            if getattr(response, "text", None):
-                return response.text
+                response = client.models.generate_content(
+                    model=model,
+                    contents=prompt
+                )
 
-        except Exception as e:
+                if getattr(response, "text", None):
+                    return response.text
 
-            last_error = str(e)
+            except Exception as e:
 
-            if (
-                "API_KEY_INVALID" in last_error
-                or "API key not valid" in last_error
-            ):
-                return "⚠️ Invalid Gemini API Key."
+                last_error = str(e)
 
-            if (
-                "429" in last_error
-                or "RESOURCE_EXHAUSTED" in last_error
-            ):
-                return "⚠️ Gemini quota exceeded."
+                if (
+                    "API_KEY_INVALID" in last_error
+                    or "API key not valid" in last_error
+                ):
+                    return "⚠️ Invalid Gemini API Key."
+
+                if (
+                    "429" in last_error
+                    or "RESOURCE_EXHAUSTED" in last_error
+                ):
+                    return "⚠️ Gemini quota exceeded. Please try again later."
+
+                if (
+                    "404" in last_error
+                    or "NOT_FOUND" in last_error
+                ):
+                    break
 
     return f"⚠️ Gemini Error: {last_error}"
 
@@ -396,16 +392,12 @@ def gemini_generate(prompt):
 # AI ANALYSIS
 # =====================================================
 
-def analyze_resume(
-    resume_text,
-    role,
-    job_description=""
-):
+def analyze_resume(resume_text, role, job_description=""):
 
     resume_text = resume_text[:12000]
 
     prompt = f"""
-You are an ATS Resume Reviewer.
+You are an expert ATS Resume Reviewer.
 
 Target Role:
 {role}
@@ -413,7 +405,7 @@ Target Role:
 Job Description:
 {job_description if job_description else "Not provided"}
 
-Return ONLY:
+Return ONLY these sections:
 
 # Professional Summary
 
@@ -437,11 +429,7 @@ Resume:
 # AI REWRITE
 # =====================================================
 
-def rewrite_resume(
-    resume_text,
-    role,
-    job_description=""
-):
+def rewrite_resume(resume_text, role, job_description=""):
 
     resume_text = resume_text[:12000]
 
@@ -462,7 +450,7 @@ Rules:
 - Improve formatting.
 - Make it ATS-friendly.
 
-Use sections:
+Use these sections:
 
 # Professional Summary
 # Technical Skills
@@ -586,25 +574,14 @@ def generate_pdf_report(
 # DOCX GENERATOR
 # =====================================================
 
-def generate_resume_docx(
-    filename,
-    rewritten_resume,
-    role
-):
+def generate_resume_docx(filename, rewritten_resume, role):
 
     doc = Document()
 
-    heading = doc.add_heading(
-        "AI Rewritten Resume",
-        1
-    )
-
+    heading = doc.add_heading("AI Rewritten Resume",1)
     heading.runs[0].font.size = Pt(22)
 
-    doc.add_paragraph(
-        f"Target Role: {role}"
-    )
-
+    doc.add_paragraph(f"Target Role: {role}")
     doc.add_paragraph()
 
     for line in rewritten_resume.split("\n"):
@@ -621,10 +598,7 @@ def generate_resume_docx(
             doc.add_heading(line[3:],2)
 
         elif line.startswith("- "):
-            doc.add_paragraph(
-                line[2:],
-                style="List Bullet"
-            )
+            doc.add_paragraph(line[2:], style="List Bullet")
 
         else:
             doc.add_paragraph(line)
