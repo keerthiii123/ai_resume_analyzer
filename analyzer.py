@@ -344,45 +344,30 @@ def gemini_generate(prompt):
         return "⚠️ GEMINI_API_KEY not configured."
 
     models = [
-        "gemini-2.5-pro",
-        "gemini-2.5-flash"
+        "gemini-2.5-flash-lite",   # New supported model
+        "gemini-2.5-pro"
     ]
 
     last_error = ""
 
     for model in models:
-
         try:
-
             response = client.models.generate_content(
                 model=model,
                 contents=prompt
             )
 
-            if getattr(response, "text", None):
+            if response.text:
                 return response.text
 
         except Exception as e:
-
             last_error = str(e)
 
-            if (
-                "API_KEY_INVALID" in last_error
-                or "API key not valid" in last_error
-            ):
-                return "⚠️ Invalid Gemini API Key."
-
-            if (
-                "429" in last_error
-                or "RESOURCE_EXHAUSTED" in last_error
-            ):
+            if "429" in last_error:
                 return "⚠️ Gemini quota exceeded. Please try again later."
 
-            if (
-                "404" in last_error
-                or "NOT_FOUND" in last_error
-            ):
-                continue
+            # Try next model if one is unavailable
+            continue
 
     return f"⚠️ Gemini Error: {last_error}"
 
