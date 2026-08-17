@@ -36,14 +36,7 @@ except Exception:
 
 client = genai.Client(api_key=api_key) if api_key else None
 
-
-# =====================================================
-# GEMINI MODEL
-# =====================================================
-
 GEMINI_MODEL = "gemini-3.6-flash"
-
-
 
 
 # =====================================================
@@ -92,7 +85,9 @@ ROLE_SKILLS = {
         "django",
         "python",
         "mysql",
-        "node"
+        "node",
+        "rest api",
+        "git"
     ],
 
     "Data Analyst": [
@@ -168,11 +163,13 @@ ALIASES = {
     ],
 
     "rag": [
-        "retrieval augmented generation"
+        "retrieval augmented generation",
+        "retrieval-augmented generation"
     ],
 
     "llm": [
-        "large language model"
+        "large language model",
+        "large language models"
     ],
 
     "github": [
@@ -181,7 +178,8 @@ ALIASES = {
 
     "generative ai": [
         "gen ai",
-        "genai"
+        "genai",
+        "generative artificial intelligence"
     ],
 
     "fastapi": [
@@ -212,8 +210,20 @@ ALIASES = {
     ],
 
     "rest api": [
-        "restful api",
-        "rest api"
+        "restful api"
+    ],
+
+    "langchain": [
+        "lang chain"
+    ],
+
+    "langgraph": [
+        "lang graph"
+    ],
+
+    "chromadb": [
+        "chroma db",
+        "chroma"
     ]
 }
 
@@ -308,7 +318,9 @@ def skill_exists(text, skill):
 
     text = normalize_text(text)
 
-    keywords = [skill] + ALIASES.get(skill, [])
+    keywords = [
+        skill
+    ] + ALIASES.get(skill, [])
 
     for keyword in keywords:
 
@@ -333,6 +345,39 @@ def skill_exists(text, skill):
 
 
 # =====================================================
+# EXTRACT JD KEYWORDS
+# =====================================================
+
+def extract_jd_keywords(job_description):
+
+    if not job_description.strip():
+        return []
+
+    jd_text = normalize_text(job_description)
+
+    all_skills = sorted(
+        set(
+            skill
+            for skills in ROLE_SKILLS.values()
+            for skill in skills
+        )
+    )
+
+    matched_jd_skills = []
+
+    for skill in all_skills:
+
+        if skill_exists(
+            jd_text,
+            skill
+        ):
+
+            matched_jd_skills.append(skill)
+
+    return matched_jd_skills
+
+
+# =====================================================
 # JOB DESCRIPTION MATCH
 # =====================================================
 
@@ -342,47 +387,57 @@ def job_description_match(
 ):
 
     if not job_description.strip():
+
         return 0, [], []
 
-    resume_text = normalize_text(resume_text)
-    jd_text = normalize_text(job_description)
+    resume_text = normalize_text(
+        resume_text
+    )
 
-    keywords = sorted(
-        set(
-            skill
-            for skills in ROLE_SKILLS.values()
-            for skill in skills
-        )
+    jd_keywords = extract_jd_keywords(
+        job_description
     )
 
     matched = []
     missing = []
 
-    for keyword in keywords:
+    for keyword in jd_keywords:
 
-        if skill_exists(jd_text, keyword):
+        if skill_exists(
+            resume_text,
+            keyword
+        ):
 
-            if skill_exists(resume_text, keyword):
-                matched.append(keyword)
+            matched.append(keyword)
 
-            else:
-                missing.append(keyword)
+        else:
 
-    total_keywords = len(matched) + len(missing)
+            missing.append(keyword)
+
+    total_keywords = (
+        len(matched)
+        + len(missing)
+    )
 
     if total_keywords == 0:
-        percentage = 0
 
-    else:
-        percentage = round(
-            len(matched) / total_keywords * 100
-        )
+        return 0, [], []
 
-    return percentage, matched, missing
+    percentage = round(
+        len(matched)
+        / total_keywords
+        * 100
+    )
+
+    return (
+        percentage,
+        matched,
+        missing
+    )
 
 
 # =====================================================
-# ATS SCORE
+# ATS SCORE - 100
 # =====================================================
 
 def calculate_ats_score(
@@ -391,7 +446,13 @@ def calculate_ats_score(
     job_description=""
 ):
 
-    text = normalize_text(resume_text)
+    text = normalize_text(
+        resume_text
+    )
+
+    # =================================================
+    # 1. ROLE SKILLS - 30
+    # =================================================
 
     role_skills = ROLE_SKILLS.get(
         role,
@@ -403,98 +464,237 @@ def calculate_ats_score(
 
     for skill in role_skills:
 
-        if skill_exists(text, skill):
+        if skill_exists(
+            text,
+            skill
+        ):
+
             found_skills.append(skill)
 
         else:
-            missing_skills.append(skill)
 
-    # -------------------------------------------------
-    # SKILLS SCORE - 60
-    # -------------------------------------------------
+            missing_skills.append(skill)
 
     skills_score = round(
         len(found_skills)
         / max(1, len(role_skills))
-        * 60
+        * 30
     )
 
-    # -------------------------------------------------
-    # JOB DESCRIPTION SCORE - 20
-    # -------------------------------------------------
+    # =================================================
+    # 2. JOB DESCRIPTION - 25
+    # =================================================
 
-    jd_percent, _, _ = job_description_match(
-        resume_text,
-        job_description
+    jd_percent, matched_keywords, missing_keywords = (
+        job_description_match(
+            resume_text,
+            job_description
+        )
     )
 
     jd_score = round(
-        jd_percent * 20 / 100
+        jd_percent
+        * 25
+        / 100
     )
 
-    # -------------------------------------------------
-    # EDUCATION SCORE - 5
-    # -------------------------------------------------
-
-    education_keywords = [
-        "b.e",
-        "be ",
-        "btech",
-        "b.tech",
-        "engineering",
-        "bachelor",
-        "master",
-        "m.e",
-        "mtech"
-    ]
-
-    education_score = 5 if any(
-        keyword in text
-        for keyword in education_keywords
-    ) else 0
-
-    # -------------------------------------------------
-    # EXPERIENCE SCORE - 5
-    # -------------------------------------------------
+    # =================================================
+    # 3. EXPERIENCE - 15
+    # =================================================
 
     experience_keywords = [
         "experience",
         "work experience",
         "professional experience",
-        "employment"
+        "employment",
+        "internship"
     ]
 
-    experience_score = 5 if any(
+    has_experience = any(
         keyword in text
         for keyword in experience_keywords
-    ) else 0
+    )
 
-    # -------------------------------------------------
-    # PROJECT SCORE - 5
-    # -------------------------------------------------
+    experience_score = (
+        15
+        if has_experience
+        else 0
+    )
+
+    # =================================================
+    # 4. PROJECTS - 10
+    # =================================================
 
     project_keywords = [
         "project",
+        "projects",
+        "portfolio"
+    ]
+
+    has_projects = any(
+        keyword in text
+        for keyword in project_keywords
+    )
+
+    project_score = (
+        10
+        if has_projects
+        else 0
+    )
+
+    # =================================================
+    # 5. EDUCATION - 5
+    # =================================================
+
+    education_keywords = [
+        "b.e",
+        "b.e.",
+        "be ",
+        "btech",
+        "b.tech",
+        "bachelor",
+        "master",
+        "m.e",
+        "m.e.",
+        "mtech",
+        "engineering",
+        "university",
+        "college",
+        "degree"
+    ]
+
+    has_education = any(
+        keyword in text
+        for keyword in education_keywords
+    )
+
+    education_score = (
+        5
+        if has_education
+        else 0
+    )
+
+    # =================================================
+    # 6. RESUME SECTIONS - 5
+    # =================================================
+
+    sections = [
+        "summary",
+        "objective",
+        "skills",
+        "experience",
+        "education",
         "projects"
     ]
 
-    project_score = 5 if any(
-        keyword in text
-        for keyword in project_keywords
-    ) else 0
+    section_count = sum(
+        1
+        for section in sections
+        if section in text
+    )
 
-    # -------------------------------------------------
-    # TOTAL
-    # -------------------------------------------------
+    sections_score = round(
+        section_count
+        / len(sections)
+        * 5
+    )
+
+    # =================================================
+    # 7. CONTACT INFORMATION - 5
+    # =================================================
+
+    email_found = bool(
+        re.search(
+            r"[A-Za-z0-9._%+-]+@"
+            r"[A-Za-z0-9.-]+\."
+            r"[A-Za-z]{2,}",
+            text
+        )
+    )
+
+    phone_found = bool(
+        re.search(
+            r"\b\d{10}\b",
+            text
+        )
+    )
+
+    linkedin_found = (
+        "linkedin" in text
+    )
+
+    contact_items = sum(
+        [
+            email_found,
+            phone_found,
+            linkedin_found
+        ]
+    )
+
+    contact_score = round(
+        contact_items
+        / 3
+        * 5
+    )
+
+    # =================================================
+    # 8. ATS FORMATTING - 5
+    # =================================================
+
+    formatting_score = 0
+
+    if len(text) > 500:
+
+        formatting_score += 2
+
+    if len(text.split()) >= 150:
+
+        formatting_score += 1
+
+    heading_keywords = [
+        "skills",
+        "experience",
+        "education"
+    ]
+
+    heading_count = sum(
+        1
+        for heading in heading_keywords
+        if heading in text
+    )
+
+    if heading_count >= 2:
+
+        formatting_score += 2
+
+    formatting_score = min(
+        formatting_score,
+        5
+    )
+
+    # =================================================
+    # TOTAL SCORE
+    # =================================================
+
+    total = (
+        skills_score
+        + jd_score
+        + experience_score
+        + project_score
+        + education_score
+        + sections_score
+        + contact_score
+        + formatting_score
+    )
 
     total = min(
         100,
-        skills_score
-        + jd_score
-        + education_score
-        + experience_score
-        + project_score
+        total
     )
+
+    # =================================================
+    # BREAKDOWN
+    # =================================================
 
     breakdown = {
 
@@ -504,7 +704,15 @@ def calculate_ats_score(
 
         "education": education_score,
 
-        "projects": project_score
+        "projects": project_score,
+
+        "experience": experience_score,
+
+        "sections": sections_score,
+
+        "contact": contact_score,
+
+        "formatting": formatting_score
     }
 
     return (
@@ -523,9 +731,9 @@ def calculate_ats_score(
 def gemini_generate(prompt):
 
     if client is None:
+
         return (
-            "⚠️ GEMINI_API_KEY is not configured. "
-            "Please add your Gemini API key."
+            "⚠️ GEMINI_API_KEY is not configured."
         )
 
     try:
@@ -536,9 +744,12 @@ def gemini_generate(prompt):
         )
 
         if response and response.text:
+
             return response.text
 
-        return "⚠️ Empty response from Gemini."
+        return (
+            "⚠️ Empty response from Gemini."
+        )
 
     except Exception as e:
 
@@ -546,32 +757,43 @@ def gemini_generate(prompt):
         error_lower = error.lower()
 
         if (
-            "api_key_invalid" in error_lower
-            or "invalid api key" in error_lower
-            or "401" in error_lower
-            or "unauthenticated" in error_lower
+            "api_key_invalid"
+            in error_lower
+            or "invalid api key"
+            in error_lower
+            or "401"
+            in error_lower
+            or "unauthenticated"
+            in error_lower
         ):
+
             return (
-                "⚠️ Invalid Gemini API key. "
-                "Please check GEMINI_API_KEY."
+                "⚠️ Invalid Gemini API key."
             )
 
         if "429" in error_lower:
+
             return (
-                "⚠️ Gemini quota/rate limit exceeded. "
-                "Please try again later."
+                "⚠️ Gemini quota/rate limit exceeded."
             )
 
         if (
-            "404" in error_lower
-            or "not found" in error_lower
+            "404"
+            in error_lower
+            or "not found"
+            in error_lower
         ):
+
             return (
-                f"⚠️ Gemini model '{GEMINI_MODEL}' "
-                "was not found or is unavailable."
+                f"⚠️ Gemini model "
+                f"'{GEMINI_MODEL}' "
+                "was not found."
             )
 
-        return f"⚠️ Gemini Error: {error}"
+        return (
+            f"⚠️ Gemini Error: {error}"
+        )
+
 
 # =====================================================
 # AI RESUME ANALYSIS
@@ -612,20 +834,23 @@ Return ONLY these sections:
 
 # Five Interview Questions
 
-Important rules:
+Rules:
 
 - Use only information available in the resume.
 - Do not invent experience.
 - Do not invent skills.
 - Do not invent companies.
-- Do not claim that the candidate knows a technology unless it appears in the resume.
 - Give practical ATS-focused suggestions.
+- Consider the target role.
+- If a job description is provided, consider relevant keywords.
 
 Resume:
 {resume_text}
 """
 
-    return gemini_generate(prompt)
+    return gemini_generate(
+        prompt
+    )
 
 
 # =====================================================
@@ -657,18 +882,18 @@ Job Description:
 
 Rules:
 
-- Use ONLY genuine information from the original resume.
+- Use ONLY genuine information.
 - Do NOT invent companies.
 - Do NOT invent projects.
 - Do NOT invent experience.
 - Do NOT invent skills.
 - Do NOT change dates.
 - Do NOT create fake achievements.
-- Improve grammar and clarity.
-- Use strong professional wording.
-- Make the resume ATS-friendly.
-- Include relevant keywords only when they are already supported by the original resume.
-- Keep the content truthful.
+- Improve grammar.
+- Improve clarity.
+- Use professional wording.
+- Make it ATS-friendly.
+- Use relevant keywords only when supported by the original resume.
 
 Use these sections:
 
@@ -686,11 +911,13 @@ Resume:
 {resume_text}
 """
 
-    return gemini_generate(prompt)
+    return gemini_generate(
+        prompt
+    )
 
 
 # =====================================================
-# PDF REPORT GENERATOR
+# PDF REPORT
 # =====================================================
 
 def generate_pdf_report(
@@ -719,10 +946,6 @@ def generate_pdf_report(
 
     elements = []
 
-    # -------------------------------------------------
-    # TITLE
-    # -------------------------------------------------
-
     elements.append(
         Paragraph(
             "AI Resume ATS Report",
@@ -733,10 +956,6 @@ def generate_pdf_report(
     elements.append(
         Spacer(1, 20)
     )
-
-    # -------------------------------------------------
-    # TARGET ROLE
-    # -------------------------------------------------
 
     elements.append(
         Paragraph(
@@ -756,10 +975,6 @@ def generate_pdf_report(
         Spacer(1, 15)
     )
 
-    # -------------------------------------------------
-    # SCORE BREAKDOWN
-    # -------------------------------------------------
-
     elements.append(
         Paragraph(
             "Score Breakdown",
@@ -771,7 +986,7 @@ def generate_pdf_report(
 
         elements.append(
             Paragraph(
-                f"{key.title()}: {value}",
+                f"{key.replace('_', ' ').title()}: {value}",
                 styles["BodyText"]
             )
         )
@@ -779,10 +994,6 @@ def generate_pdf_report(
     elements.append(
         Spacer(1, 15)
     )
-
-    # -------------------------------------------------
-    # SKILLS FOUND
-    # -------------------------------------------------
 
     elements.append(
         Paragraph(
@@ -804,10 +1015,6 @@ def generate_pdf_report(
         Spacer(1, 15)
     )
 
-    # -------------------------------------------------
-    # MISSING SKILLS
-    # -------------------------------------------------
-
     elements.append(
         Paragraph(
             "Missing Skills",
@@ -824,10 +1031,6 @@ def generate_pdf_report(
         )
     )
 
-    # -------------------------------------------------
-    # AI SUMMARY
-    # -------------------------------------------------
-
     if ai_summary:
 
         elements.append(
@@ -841,7 +1044,6 @@ def generate_pdf_report(
             )
         )
 
-        # Escape HTML-sensitive characters
         safe_summary = (
             ai_summary
             .replace("&", "&amp;")
@@ -857,11 +1059,9 @@ def generate_pdf_report(
             )
         )
 
-    # -------------------------------------------------
-    # BUILD PDF
-    # -------------------------------------------------
-
-    doc.build(elements)
+    doc.build(
+        elements
+    )
 
     return filename
 
@@ -878,10 +1078,6 @@ def generate_resume_docx(
 
     doc = Document()
 
-    # -------------------------------------------------
-    # TITLE
-    # -------------------------------------------------
-
     heading = doc.add_heading(
         "AI Rewritten Resume",
         1
@@ -891,19 +1087,11 @@ def generate_resume_docx(
 
         heading.runs[0].font.size = Pt(22)
 
-    # -------------------------------------------------
-    # TARGET ROLE
-    # -------------------------------------------------
-
     doc.add_paragraph(
         f"Target Role: {role}"
     )
 
     doc.add_paragraph()
-
-    # -------------------------------------------------
-    # RESUME CONTENT
-    # -------------------------------------------------
 
     for line in rewritten_resume.splitlines():
 
@@ -912,7 +1100,6 @@ def generate_resume_docx(
         if not line:
             continue
 
-        # Markdown H1
         if line.startswith("# "):
 
             doc.add_heading(
@@ -920,7 +1107,6 @@ def generate_resume_docx(
                 level=1
             )
 
-        # Markdown H2
         elif line.startswith("## "):
 
             doc.add_heading(
@@ -928,7 +1114,6 @@ def generate_resume_docx(
                 level=2
             )
 
-        # Markdown bullet
         elif line.startswith("- "):
 
             doc.add_paragraph(
@@ -936,7 +1121,6 @@ def generate_resume_docx(
                 style="List Bullet"
             )
 
-        # Markdown numbered list
         elif re.match(
             r"^\d+\.\s+",
             line
@@ -953,18 +1137,15 @@ def generate_resume_docx(
                 style="List Number"
             )
 
-        # Normal text
         else:
 
             doc.add_paragraph(
                 line
             )
 
-    # -------------------------------------------------
-    # SAVE
-    # -------------------------------------------------
-
-    doc.save(filename)
+    doc.save(
+        filename
+    )
 
     return filename
 
