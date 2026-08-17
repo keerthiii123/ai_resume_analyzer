@@ -4,10 +4,10 @@ from analyzer import (
     extract_text,
     resume_preview,
     calculate_ats_score,
+    job_description_match,
     analyze_resume,
     rewrite_resume,
     generate_pdf_report,
-    job_description_match,
     generate_resume_docx
 )
 
@@ -22,99 +22,66 @@ st.set_page_config(
 )
 
 # =====================================================
-# CSS
+# CUSTOM CSS
 # =====================================================
 
 st.markdown("""
 <style>
 
-.main-title{
-text-align:center;
-font-size:42px;
-font-weight:bold;
-color:#2563EB;
-}
-
-.subtitle{
-text-align:center;
-color:#6B7280;
-font-size:18px;
-margin-bottom:25px;
-}
-
-.top-card{
-background:linear-gradient(135deg,#111827,#1E3A8A);
-padding:20px;
-border-radius:18px;
-text-align:center;
-color:white;
-margin-bottom:25px;
-}
-
-.score-wrapper{
-display:flex;
-justify-content:center;
-margin:20px 0;
-}
-
 .score-circle{
-width:220px;
-height:220px;
+width:180px;
+height:180px;
 border-radius:50%;
-background:conic-gradient(#2563EB var(--score),#E5E7EB 0deg);
 display:flex;
-justify-content:center;
 align-items:center;
+justify-content:center;
+margin:auto;
+background:
+conic-gradient(#2563eb var(--score),#e5e7eb 0);
+padding:12px;
 }
 
 .score-inner{
-width:165px;
-height:165px;
+width:100%;
+height:100%;
 background:white;
 border-radius:50%;
 display:flex;
 flex-direction:column;
-justify-content:center;
 align-items:center;
+justify-content:center;
 }
 
 .score-number{
-font-size:48px;
+font-size:42px;
 font-weight:bold;
 color:#111827;
 }
 
 .score-label{
 font-size:14px;
-color:#6B7280;
+color:#6b7280;
+text-align:center;
 }
 
 .skill-found{
 display:inline-block;
-background:#DCFCE7;
+background:#dcfce7;
 color:#166534;
-padding:8px 14px;
-border-radius:999px;
+padding:8px 12px;
+border-radius:20px;
 margin:5px;
 font-weight:600;
 }
 
 .skill-missing{
 display:inline-block;
-background:#FEE2E2;
-color:#991B1B;
-padding:8px 14px;
-border-radius:999px;
+background:#fee2e2;
+color:#991b1b;
+padding:8px 12px;
+border-radius:20px;
 margin:5px;
 font-weight:600;
-}
-
-.tip-card{
-background:#EFF6FF;
-padding:15px;
-border-left:5px solid #2563EB;
-border-radius:10px;
-margin:15px 0;
 }
 
 </style>
@@ -124,29 +91,20 @@ margin:15px 0;
 # HEADER
 # =====================================================
 
-st.markdown(
-    "<div class='main-title'>📄 AI Resume Analyzer</div>",
-    unsafe_allow_html=True
-)
+st.title("📄 AI Resume Analyzer")
+st.write("Upload any resume and get **ATS + AI-powered feedback.**")
 
-st.markdown(
-    "<div class='subtitle'>Upload any resume and get ATS + AI-powered feedback.</div>",
-    unsafe_allow_html=True
-)
-
-st.markdown("""
-<div class="top-card">
-<h2>🤖 AI Resume Analysis</h2>
-<p>Powered by Gemini + Python ATS Engine</p>
-</div>
-""", unsafe_allow_html=True)
+st.markdown("## 🤖 AI Resume Analysis")
+st.caption("Powered by Gemini + Python ATS Engine")
 
 # =====================================================
 # TARGET ROLE
 # =====================================================
 
+st.subheader("🎯 Select Target Role")
+
 target_role = st.selectbox(
-    "🎯 Select Target Role",
+    "Target Role",
     [
         "AI Engineer",
         "Python Developer",
@@ -163,8 +121,10 @@ target_role = st.selectbox(
 # FILE UPLOAD
 # =====================================================
 
+st.subheader("📤 Upload Resume (PDF)")
+
 uploaded_file = st.file_uploader(
-    "📤 Upload Resume (PDF)",
+    "Choose your resume",
     type=["pdf"]
 )
 
@@ -172,41 +132,52 @@ uploaded_file = st.file_uploader(
 # JOB DESCRIPTION
 # =====================================================
 
+st.subheader("📋 Paste Job Description (Optional)")
+
 job_description = st.text_area(
-    "📋 Paste Job Description (Optional)",
-    height=150,
-    placeholder="Example: We need a Python Developer with FastAPI, SQL and Git..."
+    "Job Description",
+    placeholder="Example: Looking for a Python Developer with FastAPI, SQL, Git and REST APIs...",
+    height=150
 )
 
 # =====================================================
-# MAIN
+# MAIN APP
 # =====================================================
 
 if uploaded_file:
 
     st.success("✅ Resume uploaded successfully!")
 
-    # ---------------- Resume Preview ----------------
+    try:
+        resume_text = extract_text(uploaded_file)
+
+        if not resume_text.strip():
+            st.error("No readable text found in this PDF.")
+            st.stop()
+
+    except Exception as e:
+        st.error(f"Text extraction failed: {e}")
+        st.stop()
+
+    # Resume Preview
 
     st.subheader("👀 Resume Preview")
 
-    preview = resume_preview(uploaded_file)
+    try:
+        preview = resume_preview(uploaded_file)
+        st.image(preview, caption="First page of uploaded resume")
+    except:
+        st.warning("Preview unavailable.")
 
-    st.image(
-        preview,
-        caption="First page of uploaded resume",
-        use_container_width=True
-    )
+    # ATS
 
-    # ---------------- Resume Text ----------------
-
-    with st.spinner("Reading resume..."):
-
-        resume_text = extract_text(uploaded_file)
-
-    # ---------------- ATS ----------------
-
-    score, found_skills, missing_skills, improvement_skills, breakdown = calculate_ats_score(
+    (
+        score,
+        found_skills,
+        missing_skills,
+        improvement_skills,
+        breakdown
+    ) = calculate_ats_score(
         resume_text,
         target_role,
         job_description
@@ -218,38 +189,94 @@ if uploaded_file:
 
     angle = score * 3.6
 
-    st.markdown(f"""
-<div class="score-wrapper">
-<div class="score-circle" style="--score:{angle}deg;">
-<div class="score-inner">
-<div class="score-number">{score}</div>
-<div class="score-label">ATS Score /100</div>
-</div>
-</div>
-</div>
-""", unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class="score-circle" style="--score:{angle}deg;">
+            <div class="score-inner">
+                <div class="score-number">{score}</div>
+                <div class="score-label">ATS Score /100</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
     if score >= 80:
         st.success("🎉 Excellent ATS Score!")
+
     elif score >= 60:
-        st.warning("👍 Good score.")
+        st.success("👍 Good score. A few improvements can make it stronger.")
+
+    elif score >= 40:
+        st.warning("⚠️ Average score.")
+
     else:
-        st.error("⚠️ Improve your resume.")
+        st.error("Resume needs improvement.")
 
     st.info(f"ATS evaluated for: **{target_role}**")
 
-    # ---------------- Breakdown ----------------
+    # Breakdown
 
     st.subheader("📈 Score Breakdown")
 
-    c1,c2,c3,c4 = st.columns(4)
+    c1, c2, c3, c4 = st.columns(4)
 
     c1.metric("Skills", breakdown["skills"])
     c2.metric("JD Match", breakdown["job_description"])
     c3.metric("Education", breakdown["education"])
     c4.metric("Projects", breakdown["projects"])
 
-    # ---------------- Skills ----------------
+    # JD Match
+
+    if job_description.strip():
+
+        st.divider()
+
+        st.subheader("🎯 Resume vs Job Description Match")
+
+        percentage, matched, missing = job_description_match(
+            resume_text,
+            job_description
+        )
+
+        st.metric("Match", f"{percentage}%")
+        st.progress(percentage / 100)
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+
+            st.markdown("### 🟢 Matched Keywords")
+
+            if matched:
+
+                html = ""
+
+                for word in matched:
+                    html += f"<span class='skill-found'>✓ {word.title()}</span>"
+
+                st.markdown(html, unsafe_allow_html=True)
+
+            else:
+                st.info("No matched keywords.")
+
+        with col2:
+
+            st.markdown("### 🔴 Missing Keywords")
+
+            if missing:
+
+                html = ""
+
+                for word in missing[:20]:
+                    html += f"<span class='skill-missing'>✗ {word.title()}</span>"
+
+                st.markdown(html, unsafe_allow_html=True)
+
+            else:
+                st.success("No important keywords missing.")
+
+    # Skills
 
     st.divider()
 
@@ -257,66 +284,71 @@ if uploaded_file:
 
     if found_skills:
 
-        html=""
+        html = ""
 
-        for s in found_skills:
-            html += f"<span class='skill-found'>✓ {s.title()}</span>"
+        for skill in found_skills:
+            html += f"<span class='skill-found'>✓ {skill.title()}</span>"
 
         st.markdown(html, unsafe_allow_html=True)
+
+    else:
+        st.info("No skills detected.")
 
     st.subheader("❌ Missing Skills")
 
     if missing_skills:
 
-        html=""
+        html = ""
 
-        for s in missing_skills:
-            html += f"<span class='skill-missing'>✗ {s.title()}</span>"
+        for skill in missing_skills:
+            html += f"<span class='skill-missing'>✗ {skill.title()}</span>"
 
         st.markdown(html, unsafe_allow_html=True)
 
-    # ---------------- Improvement ----------------
+    else:
+        st.success("🎉 No important skills missing.")
 
-    st.divider()
+    # Suggestions
 
     st.subheader("💡 Improvement Suggestions")
 
-    st.markdown("""
-<div class="tip-card">
-Add only the skills you genuinely know.
-</div>
-""", unsafe_allow_html=True)
+    if improvement_skills:
 
-    for s in improvement_skills:
-        st.write(f"👉 **{s.title()}**")
+        for skill in improvement_skills:
+            st.write(f"👉 **{skill.title()}**")
 
-    # ---------------- Gemini ----------------
+    else:
+        st.success("Your resume already contains the important skills.")
+
+    # =====================================================
+    # AI ANALYSIS
+    # =====================================================
 
     st.divider()
 
     st.subheader("🤖 AI Resume Analysis")
 
-    ai_result=""
-
-    if st.button("Analyze with Gemini"):
+    if st.button("Analyze Resume", use_container_width=True):
 
         with st.spinner("Gemini is analyzing..."):
 
-            ai_result = analyze_resume(
+            result = analyze_resume(
                 resume_text,
                 target_role,
                 job_description
             )
 
-        st.markdown(ai_result)
+        st.markdown(result)
 
-    # ---------------- Rewrite ----------------
+    # =====================================================
+    # AI REWRITE
+    # =====================================================
 
     st.divider()
 
     st.subheader("✍️ AI Resume Rewrite")
 
-    if st.button("Rewrite Resume"):
+    if st.button("Rewrite Resume", use_container_width=True):
 
         with st.spinner("Rewriting..."):
 
@@ -326,43 +358,77 @@ Add only the skills you genuinely know.
                 job_description
             )
 
-        st.markdown(rewritten)
+        if rewritten and not rewritten.startswith("⚠️"):
 
-        st.download_button(
-            "📥 Download Rewritten Resume",
-            rewritten,
-            file_name="rewritten_resume.md"
-        )
+            st.markdown(rewritten)
 
-    # ---------------- PDF Report ----------------
+            st.download_button(
+                "📥 Download Markdown",
+                rewritten,
+                file_name="rewritten_resume.md"
+            )
+
+            docx = generate_resume_docx(
+                "Rewritten_Resume.docx",
+                rewritten,
+                target_role
+            )
+
+            with open(docx, "rb") as f:
+
+                st.download_button(
+                    "📄 Download DOCX Resume",
+                    f,
+                    file_name="Rewritten_Resume.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
+
+        else:
+            st.error(rewritten)
+
+    # =====================================================
+    # PDF REPORT
+    # =====================================================
 
     st.divider()
 
     st.subheader("📄 ATS Report")
 
-    if st.button("Generate PDF Report"):
+    if st.button("Generate PDF Report", use_container_width=True):
 
-        pdf_file = generate_pdf_report(
-            filename="ATS_Report.pdf",
-            role=target_role,
-            score=score,
-            found_skills=found_skills,
-            missing_skills=missing_skills,
-            breakdown=breakdown,
-            ai_summary=ai_result
+        pdf = generate_pdf_report(
+            "ATS_Report.pdf",
+            target_role,
+            score,
+            found_skills,
+            missing_skills,
+            breakdown
         )
 
-        with open(pdf_file,"rb") as f:
+        with open(pdf, "rb") as f:
 
             st.download_button(
-                "⬇️ Download ATS Report",
+                "📥 Download ATS Report",
                 f,
                 file_name="ATS_Report.pdf",
                 mime="application/pdf"
             )
 
-    # ---------------- Extracted Text ----------------
+    # =====================================================
+    # EXTRACTED TEXT
+    # =====================================================
+
+    st.divider()
 
     with st.expander("🔍 View Extracted Resume Text"):
 
-        st.text(resume_text)
+        st.text_area(
+            "Extracted Resume Text",
+            resume_text,
+            height=350
+        )
+
+        c1, c2 = st.columns(2)
+
+        c1.metric("Words", len(resume_text.split()))
+        c2.metric("Characters", len(resume_text))
