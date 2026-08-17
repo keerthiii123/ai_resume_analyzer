@@ -24,11 +24,14 @@ load_dotenv()
 
 try:
     api_key = st.secrets["GEMINI_API_KEY"]
+    source = "Streamlit Secrets"
 except Exception:
     api_key = os.getenv("GEMINI_API_KEY")
+    source = ".env"
 
-client = genai.Client(api_key=api_key) if api_key else None
-
+st.write("API Source:", source)
+st.write("Key Loaded:", bool(api_key))
+st.write("Key Prefix:", api_key[:4] if api_key else "None")
 # =====================================================
 # ROLE BASED SKILLS
 # =====================================================
