@@ -24,14 +24,11 @@ load_dotenv()
 
 try:
     api_key = st.secrets["GEMINI_API_KEY"]
-    source = "Streamlit Secrets"
 except Exception:
     api_key = os.getenv("GEMINI_API_KEY")
-    source = ".env"
 
-st.write("API Source:", source)
-st.write("Key Loaded:", bool(api_key))
-st.write("Key Prefix:", api_key[:4] if api_key else "None")
+client = genai.Client(api_key=api_key) if api_key else None
+
 # =====================================================
 # ROLE BASED SKILLS
 # =====================================================
@@ -95,8 +92,8 @@ ROLE_SKILLS = {
 ALIASES = {
 
     "vector database":[
-        "chromadb","pinecone","faiss",
-        "weaviate","vector db","chroma db"
+        "chromadb","chroma db","pinecone",
+        "faiss","weaviate","vector db"
     ],
 
     "huggingface":[
@@ -355,39 +352,37 @@ def gemini_generate(prompt):
 
     for model in models:
 
-        for _ in range(2):
+        try:
 
-            try:
+            response = client.models.generate_content(
+                model=model,
+                contents=prompt
+            )
 
-                response = client.models.generate_content(
-                    model=model,
-                    contents=prompt
-                )
+            if getattr(response, "text", None):
+                return response.text
 
-                if getattr(response, "text", None):
-                    return response.text
+        except Exception as e:
 
-            except Exception as e:
+            last_error = str(e)
 
-                last_error = str(e)
+            if (
+                "API_KEY_INVALID" in last_error
+                or "API key not valid" in last_error
+            ):
+                return "⚠️ Invalid Gemini API Key."
 
-                if (
-                    "API_KEY_INVALID" in last_error
-                    or "API key not valid" in last_error
-                ):
-                    return "⚠️ Invalid Gemini API Key."
+            if (
+                "429" in last_error
+                or "RESOURCE_EXHAUSTED" in last_error
+            ):
+                return "⚠️ Gemini quota exceeded. Please try again later."
 
-                if (
-                    "429" in last_error
-                    or "RESOURCE_EXHAUSTED" in last_error
-                ):
-                    return "⚠️ Gemini quota exceeded. Please try again later."
-
-                if (
-                    "404" in last_error
-                    or "NOT_FOUND" in last_error
-                ):
-                    break
+            if (
+                "404" in last_error
+                or "NOT_FOUND" in last_error
+            ):
+                continue
 
     return f"⚠️ Gemini Error: {last_error}"
 
